@@ -240,11 +240,11 @@ Q_C_DEPEND_GEN  = @echo "  [DP] $@"; $(C_DEPEND_GEN)
 # *.cc => *.d
 $(CC_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(CC_SUFFIX)
 	$($(Q)CC_DEPEND_GEN)
-	
+
 # *.c => *.d
 $(C_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(C_SUFFIX)
 	$($(Q)C_DEPEND_GEN)
-	
+
 endif # force dependency generation
 
 # needs to be here, *AFTER* the rule to generate the files
@@ -266,7 +266,7 @@ $(CC_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(CC_SUFFIX)
 	$($(Q)CC_COMP)
 
 # *.c => *.o
-$(C_OBJECTS): $(BUILD_OBJ_DIR)%.o: %.$(C_SUFFIX)
+$(C_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(C_SUFFIX)
 	@rm -f $@
 	$($(Q)C_COMP)
 
