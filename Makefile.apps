@@ -1,0 +1,294 @@
+###############################################################################
+# Makefile for FALCON Applications
+#
+#
+# This file is intended to be included in application specific Makefiles. It
+#  provides general compilation rules.
+#
+# This file can be symlinked, usually in the directory above your application.
+#  Make sure that FALCON_PATH is set ot the location of the original file, which
+#  should be in the directory with all the libfalcon_* libraries.
+#
+# This file will automatically build FALCON libraries if they arent' already
+#  built. But if they are built, they will be taken as-is (dependencies will be
+#  ignored and the libraries may get out of date). If you need the libraries
+#  rebuilt, please do a "make libsre".
+#
+# Required defines:
+#
+#    Note: These must be defined *BEFORE* "include ../falcon_makefiles/Makefile.apps"
+#
+#    TARGET         - Platform target or "native"
+#    EXE            - Executable name
+#    CC_SOURCES     - C++ source files (if any)
+#    C_SOURCES      - C source files (if any)
+#    FALCON_LIBS    - Specify which falcon_* libraries to use (if any). Note that
+#                      the "lib" prefix is dropped.
+#
+# Optional defines:
+#
+#    Note: These must be defined *BEFORE* "include ../falcon_makefiles/Makefile.apps"
+#
+#    Note: All options default to "0" and are considered enabled if set to non-zero.
+#
+#    PLATFORM_BUILD - Use BUILD_OBJS_DIR to build for multiple targets.
+#    VERBOSE        - Verbose compilation output
+#    STRIP_SYMS     - Strip symbols from $(EXE) and create $(EXE).debug
+#
+# Optional defines:
+# 
+#    Note: These can be defined *BEFORE* or *AFTER* "include ../falcon_makefiles/Makefile.apps"
+#
+#    INC_PATH       - File include path (gets added to CPPFLAGS) (-I)
+#    CPPFLAGS       - C and C++ Preprocessor flags
+#    LIB_PATH       - Library include path (only used for linking) (-L)
+#    LIBS           - Libraries (only used for linking)
+#
+# Useful invocations:
+#
+#    make all       - Create $(EXE)
+#    make clean     - Delete files created by compilation
+#    make re        - make clean, make all (does a from-scratch build)
+#
+###############################################################################
+
+###############################################################################
+# FALCON_PATH -- Location of the libfalcon_* directories
+# Tip: Set to ".." if your application is in the same directory as libfalcon_*
+###############################################################################
+
+FALCON_PATH ?= $(realpath $(CURDIR)/..)
+
+###############################################################################
+# OPTIONS
+###############################################################################
+
+PLATFORM_BUID ?= 0
+VERBOSE       ?= 0
+STRIP_SYMS    ?= 0
+
+###############################################################################
+# FALCON_LIBS
+###############################################################################
+
+# Add FALCON_LIBS paths (-I -L -l)
+INC_PATH += $(patsubst %,-I$(FALCON_PATH)/lib%/hdr,$(FALCON_LIBS))
+LIB_PATH += $(patsubst %,-L$(FALCON_PATH)/lib%/lib,$(FALCON_LIBS))
+LIBS     += $(patsubst %,-l%$(LIB_SUFFIX),$(FALCON_LIBS))
+
+###############################################################################
+# Makefile.target -- Platform specifics
+#
+# Requires:    TARGET           - Platform name or "native"
+#              PLATFORM_BUILD   - Use BUILD_OBJS_DIR to build for multiple targets
+#
+# Configures:  TARGET_LOWER     (simple, existing overridden)
+#              TARGET_UPPER     (simple, existing overridden)
+#              PATH             (simple, existing overridden)
+#              CROSS            (simple, existing overridden)
+#              LIB_SUFFIX       (simple, existing overridden)
+#              BUILD_OBJS_DIR   (simple, existing overridden)
+#              EXE              (simple)
+#              INC_PATH         (recursive)
+#              CPPFLAGS         (recursive)
+#              CFLAGS           (recursive)
+#              CXXFLAGS         (recursive)
+#              LIB_PATH         (recursive)
+#              LIBS             (recursive)
+#              LD_CMDS          (recursive)
+#              AR_FLAGS         (recursive)
+###############################################################################
+
+include $(FALCON_PATH)/falcon_makefiles/Makefile.target
+
+###############################################################################
+# TOOLS
+###############################################################################
+
+CC        = $(CROSS)g++
+C         = $(CROSS)gcc
+OBJCOPY   = $(CROSS)objcopy
+STRIP     = $(CROSS)strip
+
+###############################################################################
+# EXECUTABLE
+###############################################################################
+
+# EXE should be defined in application specific Makefile
+
+###############################################################################
+# SOURCES
+###############################################################################
+
+# CC_SOURCES and/or C_SOURCES should be defined in an application specific
+#  Makefile. You can also define ADDITIONAL_OBJECTS if you need to
+
+CC_SUFFIX ?= cc
+C_SUFFIX  ?= c
+
+CC_DEPEND  = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
+C_DEPEND   = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
+
+CC_OBJECTS = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
+C_OBJECTS  = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
+
+ifdef BUILD_OBJS_DIR
+    # convert relative path names to absolute locations
+    CC_SOURCES := $(foreach i, $(CC_SOURCES), \
+                     $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
+    C_SOURCES  := $(foreach i, $(C_SOURCES), \
+                     $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
+    
+    BUILD_OBJS_DIR := $(BUILD_OBJS_DIR)/
+    BUILD_SUBDIRS  := $(sort $(dir $(CC_OBJECTS) $(C_OBJECTS)))
+    DUMMY          := $(shell mkdir -p $(BUILD_SUBDIRS))
+endif
+
+###############################################################################
+# Update FLAGS
+###############################################################################
+
+CPPFLAGS += $(INC_PATH)
+
+###############################################################################
+# BUILD RULES
+###############################################################################
+
+MAKE_WITH_OPTS = \
+    TARGET=$(TARGET)                    \
+    PLATFORM_BUILD=$(PLATFORM_BUILD)    \
+    VERBOSE=$(VERBOSE)                  \
+    STRIP_SYMS=$(STRIP_SYMS)            \
+    $(MAKE)
+
+# quiet compilation
+Q = Q_
+ifneq ("$(VERBOSE)","0")
+    Q =
+endif
+    
+# default
+all: print_options $(EXE)
+
+# print build options
+print_options:
+	$(info ****************************************)
+	$(info Build options for $(EXE))
+	$(info )
+	$(info TARGET             = $(TARGET_UPPER))
+	$(info PATH               = $(PATH))
+	$(info CROSS              = $(CROSS))
+	$(info LIB_SUFFIX         = $(LIB_SUFFIX))
+	$(info BUILD_OBJS_DIR     = $(BUILD_OBJS_DIR))
+	$(info CPPFLAGS           = $(CPPFLAGS))
+	$(info CFLAGS             = $(CFLAGS))
+	$(info CXXFLAGS           = $(CXXFLAGS))
+	$(info LIB_PATH           = $(LIB_PATH))
+	$(info LIBS               = $(LIBS))
+	$(info LD_CMDS            = $(LD_CMDS))
+	$(info ****************************************)
+    
+# generate dependency files
+dep:
+
+# make from scratch
+re: FORCE
+	$(MAKE) clean && $(MAKE)
+    
+# dependency generation
+
+# use $(CC) -MM -MP to generate the dependencies. The -MT is to transform
+#  "main.o: " to "src/main.o src/main.d: " so that the full path is shown
+#  and the .d file also depends on all source files.
+
+# force dependency generation for "make dep"
+ifneq (,$(filter $(MAKECMDGOALS),dep))
+
+CC_DEPEND_GEN = $(CC) $(CPPFLAGS) $(CXXFLAGS) -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
+C_DEPEND_GEN  = $(C)  $(CPPFLAGS) $(CFLAGS)   -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
+
+Q_CC_DEPEND_GEN = @echo "  [DP] $@"; $(CC_DEPEND_GEN)
+Q_C_DEPEND_GEN  = @echo "  [DP] $@"; $(C_DEPEND_GEN)
+
+# *.cc => *.d
+$(CC_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(CC_SUFFIX)
+	$($(Q)CC_DEPEND_GEN)
+	
+# *.c => *.d
+$(C_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(C_SUFFIX)
+	$($(Q)C_DEPEND_GEN)
+	
+endif # force dependency generation
+
+# needs to be here, *AFTER* the rule to generate the files
+ifneq ($(MAKECMDGOALS),clean)
+-include $(CC_DEPEND) $(C_DEPEND)
+endif
+
+# compilation
+
+CC_COMP = $(CC) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
+C_COMP  = $(C)  $(CPPFLAGS) $(CFLAGS)   -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
+
+Q_CC_COMP = @echo " [CC] $@"; $(CC_COMP)
+Q_C_COMP  = @echo " [C ] $@"; $(C_COMP)
+
+# *.cc => *.o
+$(CC_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(CC_SUFFIX)
+	@rm -f $@
+	$($(Q)CC_COMP)
+
+# *.c => *.o
+$(C_OBJECTS): $(BUILD_OBJ_DIR)%.o: %.$(C_SUFFIX)
+	@rm -f $@
+	$($(Q)C_COMP)
+
+# library generation for the executable rule (we only specify FALCON_LIBS
+%.a:
+	$(shell $(FALCON_LIB_OPTS_$(subst $(LIB_SUFFIX).a,,$(@F:lib%=%))) \
+	        $(MAKE_WITH_OPTS) -C $(FALCON_PATH)/$(subst $(LIB_SUFFIX)).a,,$(@F)) all >&2)
+	        
+# EXE generation
+EXEC = $(CC) $(CPPFLAGS) $(LIBPATH) $(CC_OBJECTS) $(C_OBJECTS) $(ADDITIONAL_OBJECTS) -o $@ $(LIBS) $(LD_CMDS)
+
+Q_EXEC = @echo " [LD] $@"; $(EXEC)
+
+# *.o => executable
+# the foreach is so that we depend on FALCON_LIBS as well
+$(EXE): $(CC_OBJECTS) $(C_OBJECTS) $(ADDITIONAL_OBJECTS) \
+	$(foreach a,$(FALCON_LIBS),$(FALCON_PATH)/lib$(a)/lib/lib$(a)$(LIB_SUFFIX).a)
+	$($(Q)EXEC)
+ifneq ("$(STRIP_SYMS)","0")
+	$(OBJCOPY) --only-keep-debug $(EXE) $(EXE).debug # create symbols only file
+	$(STRIP) $(EXE) # strip final executable of symbols
+	$(OBJCOPY) --add-gnu-debuglink=$(EXE).debug $(EXE) # add debug link to exe
+endif
+
+###############################################################################
+# UTILITY RULES
+###############################################################################
+
+clean: FORCE
+	-rm -f $(EXE) $(EXE).debug $(CC_DEPEND) $(C_DEPEND) $(CC_OBJECTS) $(C_OBJECTS)
+	-rm -rf $(BUILD_OBJS_DIR)
+	
+libs: FORCE
+	$(foreach lib,$(FALCON_LIBS),\
+		$(shell $(FALCON_LIB_OPTS_$(lib)) $(MAKE_WITH_OPTS) -C $(FALCON_PATH)/lib$(lib) all >&2) \
+	)
+	@true
+	
+libsclean: FORCE
+	$(foreach lib,$(FALCON_LIBS),\
+		$(shell $(FALCON_LIB_OPTS_$(lib)) $(MAKE_WITH_OPTS) -C $(FALCON_PATH)/lib$(lib) clean >&2) \
+	)
+	@true
+
+libsre:FORCE
+	$(foreach lib,$(FALCON_LIBS),\
+		$(shell $(FALCON_LIB_OPTS_$(lib)) $(MAKE_WITH_OPTS) -C $(FALCON_PATH)/lib$(lib) re >&2) \
+	)
+	@true
+	
+# dummy FORCE rule
+FORCE:

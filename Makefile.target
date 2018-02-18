@@ -1,0 +1,121 @@
+###############################################################################
+#
+# Platform details for Makefile.libs and Makefile.apps
+#
+# Requires:    TARGET           - Platform name or "native"
+#              PLATFORM_BUILD   - Use BUILD_OBJS_DIR to build for multiple
+#                                  platforms.
+#
+# Configures:  TARGET_LOWER     - (simple, existing overridden)
+#              TARGET_UPPER     - (simple, existing overridden)
+#              PATH             - (simple, existing overridden)
+#              CROSS            - (simple, existing overridden)
+#              LIB_SUFFIX       - (simple, existing overridden)
+#              BUILD_OBJS_DIR   - (simple, existing overridden)
+#              EXE              - (simple)
+#              INC_PATH         - (recursive)
+#              CPPFLAGS         - (recursive)
+#              CFLAGS           - (recursive)
+#              CXXFLAGS         - (recursive)
+#              LIB_PATH         - (recursive)
+#              LIBS             - (recursive)
+#              LD_CMDS          - (recursive)
+#              AR_FLAGS         - (recursive)
+#
+###############################################################################
+
+ifndef TARGET
+    # use some reflection to print out the valid TARGET list
+    THIS_FILE = $(lastword $(MAKEFILE_LIST))
+    T = $(shell \sed -n 's/.*ifneq (,$$(filter $$(TARGET_UPPER),\(.*\)))/\1/p' $(THIS_FILE))
+    $(info ****************************************)
+    $(info You must define TARGET)
+    $(info Valid options: $(T))
+    $(*********************************************)
+    $(error Exit)
+endif
+
+TARGET_LOWER := $(shell \echo $(TARGET) | \tr '[:upper:]' '[:lower:]')
+TARGET_UPPER := $(shell \echo $(TARGET) | \tr '[:lower:]' '[:upper:]')
+
+###############################################################################
+# Setup base PATH
+###############################################################################
+
+PATH_COMMON := /bin:/usr/bin
+
+###############################################################################
+# Setup base FLAGS (see also Platforms section)
+###############################################################################
+
+INC_PATH += -Ihdr
+
+CPPFLAGS += -Wall -DPLATFORM_TARGET_$(TARGET_UPPER)
+CFLAGS   +=
+CXXFLAGS +=
+
+OPTIMIZE := -O2 -funroll-loops
+
+LIBS += -lpthread
+
+# no linker commands needed by default
+LD_CMDS +=
+
+# default ar flags
+AR_FLAGS = rsc
+
+###############################################################################
+# PLATFORMS
+###############################################################################
+
+ifneq (,$(filter $(TARGET_UPPER),NATIVE))
+
+    # use the native compiler
+    CROSS := 
+
+    # determine the host architecture
+    MACH := $(shell gcc -dumpmachine | \sed 's/-/_/g')
+
+    # Updating TARGET_UPPER/LOWER, but do *NOT* change TARGET
+    TARGET_LOWER := $(shell \echo $(MACH) | \tr '[:upper:]' '[:lower:]')
+    TARGET_UPPER := $(shell \echo $(MACH) | \tr '[:lower:]' '[:upper:]')
+
+else
+
+    $(error Unknown target $(TARGET_UPPER))
+
+endif
+
+###############################################################################
+# BUILD OPTIONS
+###############################################################################
+
+LIB_SUFFIX := _$(TARGET_LOWER)
+
+ifneq ("$(PLATFORM_BUILD)","0")
+    BUILD_OBJS_DIR := build_$(TARGET_LOWER)
+    EXE            := $(EXE)_$(TARGET_LOWER)
+else
+    BUILD_OBJS_DIR := 
+endif
+
+###############################################################################
+# EXPORTS
+###############################################################################
+
+export TARGET_UPPER
+export TARGET_LOWER
+export PATH
+export CROSS
+export LIB_SUFFIX
+export BUILD_OBJS_DIR
+export EXE
+export INC_PATH
+export CPPFLAGS
+export CFLAGS
+export CXXFLAGS
+export LIB_PATH
+export LIBS
+export LD_CMDS
+export AR_FLAGS
+
