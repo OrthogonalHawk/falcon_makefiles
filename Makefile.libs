@@ -1,0 +1,287 @@
+###############################################################################
+#
+# MIT License
+#
+# Copyright (c) 2018 OrthogonalHawk
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+###############################################################################
+
+###############################################################################
+#
+# Makefile for FALCON Libraries
+#
+# This file is intended to be included from library specific Makefiles. It
+#  provides general compilation rules.
+#
+# Required defines:
+#
+#     Note: These must be defined *BEFORE* "include ../falcon_makefiles/Makefile.libs"
+#
+#     TARGET              - Platform target or "native"
+#     LIB                 - Final library name. Should be: lib/libfalcon_XXX$(LIB_SUFFIX).a
+#                            where libfalcon_xxx matches the directory the library
+#                            source is located.
+#     CC_SOURCES          - C++ source files (if any)
+#     C_SOURCES           - C source files (if any)
+#
+# Optional defines:
+#
+#     Note: These must be defined *BEFORE* "include ../falcon_makefiles/Makefile.libs"
+#
+#     Note: All of these default to 0 and are enabled if set to non-zero.
+#
+#     PLATFORM_BUILD      - Use BUILD_OBJS_DIR to build for multiple platforms
+#     VERBOSE             - Verbose compilation output
+#
+# Optional defines:
+#
+#     Note: These must be defined *BEFORE* "include ../falcon_makefiles/Makefile.libs"
+#
+#     CC_SUFFIX           - C++ source file suffix (default cc)
+#     C_SUFFIX            - C source file suffix (default c)
+#     ADDITIONAL_OBJECTS  - Additional .o files to include (pre-compiled)
+#
+# Optional defines:
+#
+#     Note: These may be defined *BEFORE* or *AFTER* "include ../falcon_makefiles/Makefile.libs"
+#
+#     INC_PATH            - File include path (gets added to CPPFLAGS) (-I)
+#     CPPFLAGS            - C and C++ Preprocessor flags
+#     CFLAGS              - C flags
+#     CXXFLAGS            - C++ flags
+#
+# Optional defines:
+#
+#     Note: These must be defined *AFTER* "include ../falcon_makefiles/Makefile.libs"
+#
+#     AR_FLAGS            - Archive flags. Note recommended to change. Must be
+#                            defined "AR_FLAGS := $(AR_FLAGS)<new flags>"
+#
+# Useful invocations:
+#
+#     make all            - Create $(LIB)
+#     make clean          - Delete files created by compilation
+#     make re             - make clean, make all (does a from-scratch build)
+#     make dep            - Create dependency files
+#
+###############################################################################
+
+###############################################################################
+# OPTIONS
+###############################################################################
+
+PLATFORM_BUILD ?= 0
+VERBOSE        ?= 0
+
+###############################################################################
+# Makefile.target -- Platform specifics
+#
+# Requires:    TARGET           - Platform name or "native"
+#              PLATFORM_BUILD   - Use BUILD_OBJS_DIR to build for multiple targets
+#
+# Configures:  TARGET_LOWER     (simple, existing overridden)
+#              TARGET_UPPER     (simple, existing overridden)
+#              PATH             (simple, existing overridden)
+#              CROSS            (simple, existing overridden)
+#              LIB_SUFFIX       (simple, existing overridden)
+#              BUILD_OBJS_DIR   (simple, existing overridden)
+#              EXE              (simple)
+#              INC_PATH         (recursive)
+#              CPPFLAGS         (recursive)
+#              CFLAGS           (recursive)
+#              CXXFLAGS         (recursive)
+#              LIB_PATH         (recursive)
+#              LIBS             (recursive)
+#              LD_CMDS          (recursive)
+#              AR_FLAGS         (recursive)
+###############################################################################
+
+MAKEFILE_TARGET_DIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
+include $(MAKEFILE_TARGET_DIR)/Makefile.target
+
+###############################################################################
+# TOOLS
+###############################################################################
+
+CC        = $(CROSS)g++
+C         = $(CROSS)gcc
+OBJCOPY   = $(CROSS)objcopy
+STRIP     = $(CROSS)strip
+
+###############################################################################
+# LIBRARY
+###############################################################################
+
+# LIB should be defined in library specific Makefile
+
+###############################################################################
+# SOURCES
+###############################################################################
+
+# CC_SOURCES and/or C_SOURCES should be defined in a library specific
+#  Makefile. You can also define ADDITIONAL_OBJECTS if you need to
+
+CC_SUFFIX ?= cc
+C_SUFFIX  ?= c
+
+CC_DEPEND  = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
+C_DEPEND   = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
+
+CC_OBJECTS = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
+C_OBJECTS  = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
+
+ifdef BUILD_OBJS_DIR
+    # convert relative path names to absolute locations
+    CC_SOURCES := $(foreach i, $(CC_SOURCES), \
+                     $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
+    C_SOURCES  := $(foreach i, $(C_SOURCES), \
+                     $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
+    
+    BUILD_OBJS_DIR := $(BUILD_OBJS_DIR)/
+    BUILD_SUBDIRS  := $(sort $(dir $(CC_OBJECTS) $(C_OBJECTS)))
+    DUMMY          := $(shell mkdir -p $(BUILD_SUBDIRS))
+endif
+
+###############################################################################
+# Update FLAGS
+###############################################################################
+
+CPPFLAGS += $(INC_PATH)
+
+###############################################################################
+# BUILD RULES
+###############################################################################
+
+# quiet compilation
+Q = Q_
+ifneq ("$(VERBOSE)","0")
+    Q =
+endif
+
+# default
+all: print_options $(LIB)
+
+# print build options
+print_options:
+	$(info ****************************************)
+	$(info Build options for $(LIB))
+	$(info )
+	$(info TARGET             = $(TARGET_UPPER))
+	$(info PATH               = $(PATH))
+	$(info CROSS              = $(CROSS))
+	$(info LIB_SUFFIX         = $(LIB_SUFFIX))
+	$(info BUILD_OBJS_DIR     = $(BUILD_OBJS_DIR))
+	$(info CPPFLAGS           = $(CPPFLAGS))
+	$(info CFLAGS             = $(CFLAGS))
+	$(info CXXFLAGS           = $(CXXFLAGS))
+	$(info AR_FLAGS           = $(AR_FLAGS))
+	$(info ****************************************)
+
+# generate dependency files
+dep:
+
+# make from scratch
+re: FORCE
+	$(MAKE) clean && $(MAKE)
+
+# dependency generation
+
+# use $(CC) -MM -MP to generate the dependencies. The -MT is to transform
+#  "main.o: " to "src/main.o src/main.d: " so that the full path is shown
+#  and the .d file also depends on all source files.
+
+# force dependency generation for "make dep"
+ifneq (,$(filter $(MAKECMDGOALS),dep))
+
+CC_DEPEND_GEN = $(CC) $(CPPFLAGS) $(CXXFLAGS) -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
+C_DEPEND_GEN  = $(C)  $(CPPFLAGS) $(CFLAGS)   -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
+
+Q_CC_DEPEND_GEN = @echo "  [DP] $@"; $(CC_DEPEND_GEN)
+Q_C_DEPEND_GEN  = @echo "  [DP] $@"; $(C_DEPEND_GEN)
+
+# *.cc => *.d
+$(CC_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(CC_SUFFIX)
+	$($(Q)CC_DEPEND_GEN)
+
+# *.c => *.d
+$(C_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(C_SUFFIX)
+	$($(Q)C_DEPEND_GEN)
+
+endif # force dependency generation
+
+# needs to be here, *AFTER* the rule to generate the files
+ifneq ($(MAKECMDGOALS),clean)
+-include $(CC_DEPEND) $(C_DEPEND)
+endif
+
+# compilation
+
+CC_COMP = $(CC) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
+C_COMP  = $(C)  $(CPPFLAGS) $(CFLAGS)   -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
+
+Q_CC_COMP = @echo " [CC] $@"; $(CC_COMP)
+Q_C_COMP  = @echo " [C ] $@"; $(C_COMP)
+
+# *.cc => *.o
+$(CC_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(CC_SUFFIX)
+	@rm -f $@
+	$($(Q)CC_COMP)
+
+# *.c => *.o
+$(C_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(C_SUFFIX)
+	@rm -f $@
+	$($(Q)C_COMP)
+
+# archive creation
+
+# helper functions for libraries with so many files that we get a
+#  "argument list too long" error.
+#
+# $1 = command
+# $2 = max arguments per line
+# $3 = arguments
+define split_args
+	$(eval _args:=)
+	$(foreach obj,$3,$(eval _args+=$(obj))$(if $(word $2,$(_args)),$1$(_args)$(EOL)$(eval _args:=)))
+	$(if $(_args),$1$(_args))
+endef
+define EOL
+endef
+
+ARCHIVE=$(AR) $(AR_FLAGS) $@
+
+Q_ARCHIVE = @echo " [AR] $@"; $(ARCHIVE)
+
+# *.o => .a
+$(LIB): $(CC_OBJECTS) $(C_OBJECTS) $(ADDITIONAL_OBJECTS)
+	mkdir -p $(dir ${LIB})
+	$(call split_args,$($(Q)ARCHIVE),500,$^)
+
+###############################################################################
+# UTILITY RULES
+###############################################################################
+
+clean: FORCE
+	-rm -f $(EXE) $(EXE).debug $(CC_DEPEND) $(C_DEPEND) $(CC_OBJECTS) $(C_OBJECTS)
+	-rm -rf $(BUILD_OBJS_DIR)
+
+# dummy FORCE rule
+FORCE:
