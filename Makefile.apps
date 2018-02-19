@@ -276,7 +276,7 @@ $(C_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(C_SUFFIX)
 	        $(MAKE_WITH_OPTS) -C $(FALCON_PATH)/$(subst $(LIB_SUFFIX)).a,,$(@F)) all >&2)
 	        
 # EXE generation
-EXEC = $(CC) $(CPPFLAGS) $(LIBPATH) $(CC_OBJECTS) $(C_OBJECTS) $(ADDITIONAL_OBJECTS) -o $@ $(LIBS) $(LD_CMDS)
+EXEC = $(CC) $(CPPFLAGS) $(LIB_PATH) $(CC_OBJECTS) $(C_OBJECTS) $(ADDITIONAL_OBJECTS) -o $@ $(LIBS) $(LD_CMDS)
 
 Q_EXEC = @echo " [LD] $@"; $(EXEC)
 
