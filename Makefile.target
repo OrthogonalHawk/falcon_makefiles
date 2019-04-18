@@ -36,6 +36,8 @@
 #              TARGET_UPPER     - (simple, existing overridden)
 #              PATH             - (simple, existing overridden)
 #              CROSS            - (simple, existing overridden)
+#              NVCC             - (simple, existing overridden)
+#              NVCCFLAGS        - (simple, existing overridden)
 #              LIB_SUFFIX       - (simple, existing overridden)
 #              BUILD_OBJS_DIR   - (simple, existing overridden)
 #              EXE              - (simple)
@@ -76,7 +78,7 @@ PATH_COMMON := /bin:/usr/bin
 
 INC_PATH += -Ihdr
 
-CPPFLAGS += -Wall -DPLATFORM_TARGET_$(TARGET_UPPER)
+CPPFLAGS += -DPLATFORM_TARGET_$(TARGET_UPPER)
 CFLAGS   +=
 CXXFLAGS +=
 
@@ -97,11 +99,37 @@ AR_FLAGS = rsc
 ifneq (,$(filter $(TARGET_UPPER),NATIVE))
 
     # use the native compiler
-    CROSS := 
+    CROSS :=
+    
+    # Location of the CUDA Toolkit
+    CUDA_PATH ?= /usr/local/cuda
+
+    HOST_ARCH   := $(shell uname -m)
+    TARGET_ARCH ?= $(HOST_ARCH)
+    ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64))
+        ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64))
+            TARGET_SIZE := 64
+        endif
+    else
+        $(error ERROR - unsupported value $(TARGET_ARCH) for TARGET_ARCH!)
+    endif
+    
+    # operating system
+    HOST_OS   := $(shell uname -s 2>/dev/null | tr "[:upper:]" "[:lower:]")
+    TARGET_OS ?= $(HOST_OS)
+    ifeq (,$(filter $(TARGET_OS),linux))
+        $(error ERROR - unsupported value $(TARGET_OS) for TARGET_OS!)
+    endif
+
+    HOST_COMPILER ?= g++
+    NVCC          := $(CUDA_PATH)/bin/nvcc -ccbin $(HOST_COMPILER)
+    
+    # internal NVCC flags
+    NVCCFLAGS   := -m${TARGET_SIZE}
 
     # determine the host architecture
     MACH := $(shell gcc -dumpmachine | \sed 's/-/_/g')
-
+    
     # Updating TARGET_UPPER/LOWER, but do *NOT* change TARGET
     TARGET_LOWER := $(shell \echo $(MACH) | \tr '[:upper:]' '[:lower:]')
     TARGET_UPPER := $(shell \echo $(MACH) | \tr '[:lower:]' '[:upper:]')
@@ -132,6 +160,7 @@ endif
 export TARGET_UPPER
 export TARGET_LOWER
 export PATH
+export NVCC
 export CROSS
 export LIB_SUFFIX
 export BUILD_OBJS_DIR
@@ -140,8 +169,8 @@ export INC_PATH
 export CPPFLAGS
 export CFLAGS
 export CXXFLAGS
+export NVCCFLAGS
 export LIB_PATH
 export LIBS
 export LD_CMDS
 export AR_FLAGS
-

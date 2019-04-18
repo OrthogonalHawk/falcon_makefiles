@@ -2,7 +2,7 @@
 #
 # MIT License
 #
-# Copyright (c) 2018 OrthogonalHawk
+# Copyright (c) 2018-2019 OrthogonalHawk
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -41,6 +41,7 @@
 #                            source is located.
 #     CC_SOURCES          - C++ source files (if any)
 #     C_SOURCES           - C source files (if any)
+#     CUDA_SOURCES        - CUDA source files (if any)
 #
 # Optional defines:
 #
@@ -100,7 +101,10 @@ VERBOSE        ?= 0
 # Configures:  TARGET_LOWER     (simple, existing overridden)
 #              TARGET_UPPER     (simple, existing overridden)
 #              PATH             (simple, existing overridden)
+#              CC               (simple, existing overridden)
+#              C                (simple, existing overridden)
 #              CROSS            (simple, existing overridden)
+#              NVCC             (simple, existing overridden)
 #              LIB_SUFFIX       (simple, existing overridden)
 #              BUILD_OBJS_DIR   (simple, existing overridden)
 #              EXE              (simple)
@@ -139,24 +143,29 @@ STRIP     = $(CROSS)strip
 # CC_SOURCES and/or C_SOURCES should be defined in a library specific
 #  Makefile. You can also define ADDITIONAL_OBJECTS if you need to
 
-CC_SUFFIX ?= cc
-C_SUFFIX  ?= c
+CC_SUFFIX   ?= cc
+C_SUFFIX    ?= c
+CUDA_SUFFIX ?= cu
 
-CC_DEPEND  = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
-C_DEPEND   = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
+CC_DEPEND   = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
+C_DEPEND    = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
+CUDA_DEPEND = $(CUDA_SOURCES:%.$(CUDA_SUFFIX)=$(BUILD_OBJS_DIR)%.d)
 
-CC_OBJECTS = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
-C_OBJECTS  = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
+CC_OBJECTS    = $(CC_SOURCES:%.$(CC_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
+C_OBJECTS     = $(C_SOURCES:%.$(C_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
+CUDA_OBJECTS  = $(CUDA_SOURCES:%.$(CUDA_SUFFIX)=$(BUILD_OBJS_DIR)%.o)
 
 ifdef BUILD_OBJS_DIR
     # convert relative path names to absolute locations
-    CC_SOURCES := $(foreach i, $(CC_SOURCES), \
-                     $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
-    C_SOURCES  := $(foreach i, $(C_SOURCES), \
-                     $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
+    CC_SOURCES    := $(foreach i, $(CC_SOURCES), \
+                        $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
+    C_SOURCES     := $(foreach i, $(C_SOURCES), \
+                        $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
+    CUDA_SOURCES  := $(foreach i, $(CUDA_SOURCES), \
+                        $(if $(findstring ../, $i), $(CURDIR)/$i, $i))
     
     BUILD_OBJS_DIR := $(BUILD_OBJS_DIR)/
-    BUILD_SUBDIRS  := $(sort $(dir $(CC_OBJECTS) $(C_OBJECTS)))
+    BUILD_SUBDIRS  := $(sort $(dir $(CC_OBJECTS) $(C_OBJECTS) $(CUDA_OBJECTS)))
     DUMMY          := $(shell mkdir -p $(BUILD_SUBDIRS))
 endif
 
@@ -187,6 +196,9 @@ print_options:
 	$(info TARGET             = $(TARGET_UPPER))
 	$(info PATH               = $(PATH))
 	$(info CROSS              = $(CROSS))
+	$(info CC                 = $(CC))
+	$(info C                  = $(C))
+	$(info NVCC               = $(NVCC))
 	$(info LIB_SUFFIX         = $(LIB_SUFFIX))
 	$(info BUILD_OBJS_DIR     = $(BUILD_OBJS_DIR))
 	$(info CPPFLAGS           = $(CPPFLAGS))
@@ -211,11 +223,13 @@ re: FORCE
 # force dependency generation for "make dep"
 ifneq (,$(filter $(MAKECMDGOALS),dep))
 
-CC_DEPEND_GEN = $(CC) $(CPPFLAGS) $(CXXFLAGS) -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
-C_DEPEND_GEN  = $(C)  $(CPPFLAGS) $(CFLAGS)   -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
+CC_DEPEND_GEN    = $(CC)   $(CPPFLAGS) $(CXXFLAGS) -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
+C_DEPEND_GEN     = $(C)    $(CPPFLAGS) $(CFLAGS)   -MM -MP -MT "$(@:%.d=%.o) $@" -MF $@ $<
+CUDA_DEPEND_GEN  = $(NVCC) $(CPPFLAGS) $(CFLAGS)               "$(@:%.d=%.o) $@" -MF $@ $<
 
-Q_CC_DEPEND_GEN = @echo "  [DP] $@"; $(CC_DEPEND_GEN)
-Q_C_DEPEND_GEN  = @echo "  [DP] $@"; $(C_DEPEND_GEN)
+Q_CC_DEPEND_GEN    = @echo "  [DP] $@"; $(CC_DEPEND_GEN)
+Q_C_DEPEND_GEN     = @echo "  [DP] $@"; $(C_DEPEND_GEN)
+Q_CUDA_DEPEND_GEN  = @echo "  [DP] $@"; $(CUDA_DEPEND_GEN)
 
 # *.cc => *.d
 $(CC_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(CC_SUFFIX)
@@ -225,20 +239,25 @@ $(CC_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(CC_SUFFIX)
 $(C_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(C_SUFFIX)
 	$($(Q)C_DEPEND_GEN)
 
+# *.cu => *.d
+$(CUDA_DEPEND): $(BUILD_OBJS_DIR)%.d: %.$(CUDA_SUFFIX)
+	$($(Q)CUDA_DEPEND_GEN)
+
 endif # force dependency generation
 
 # needs to be here, *AFTER* the rule to generate the files
 ifneq ($(MAKECMDGOALS),clean)
--include $(CC_DEPEND) $(C_DEPEND)
+-include $(CC_DEPEND) $(C_DEPEND) $(CUDA_DEPEND)
 endif
 
 # compilation
+CC_COMP    = $(CC)   $(CPPFLAGS)  $(CXXFLAGS) -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
+C_COMP     = $(C)    $(CPPFLAGS)  $(CFLAGS)   -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
+CUDA_COMP  = $(NVCC) $(NVCCFLAGS) $(CXXFLAGS) -c $< -o $@
 
-CC_COMP = $(CC) $(CPPFLAGS) $(CXXFLAGS) -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
-C_COMP  = $(C)  $(CPPFLAGS) $(CFLAGS)   -MMD -MP -MT "$@ $(@:%.o=%.d)" -c $< -o $@
-
-Q_CC_COMP = @echo " [CC] $@"; $(CC_COMP)
-Q_C_COMP  = @echo " [C ] $@"; $(C_COMP)
+Q_CC_COMP    = @echo " [CC  ] $@"; $(CC_COMP)
+Q_C_COMP     = @echo " [C   ] $@"; $(C_COMP)
+Q_CUDA_COMP  = @echo " [NVCC] $@"; $(CUDA_COMP)
 
 # *.cc => *.o
 $(CC_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(CC_SUFFIX)
@@ -249,6 +268,11 @@ $(CC_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(CC_SUFFIX)
 $(C_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(C_SUFFIX)
 	@rm -f $@
 	$($(Q)C_COMP)
+
+# *.cu => *.o
+$(CUDA_OBJECTS): $(BUILD_OBJS_DIR)%.o: %.$(CUDA_SUFFIX)
+	@rm -f $@
+	$($(Q)CUDA_COMP)
 
 # archive creation
 
@@ -271,7 +295,7 @@ ARCHIVE=$(AR) $(AR_FLAGS) $@
 Q_ARCHIVE = @echo " [AR] $@"; $(ARCHIVE)
 
 # *.o => .a
-$(LIB): $(CC_OBJECTS) $(C_OBJECTS) $(ADDITIONAL_OBJECTS)
+$(LIB): $(CC_OBJECTS) $(C_OBJECTS) $(CUDA_OBJECTS) $(ADDITIONAL_OBJECTS)
 	mkdir -p $(dir ${LIB})
 	$(call split_args,$($(Q)ARCHIVE),500,$^)
 
@@ -280,7 +304,7 @@ $(LIB): $(CC_OBJECTS) $(C_OBJECTS) $(ADDITIONAL_OBJECTS)
 ###############################################################################
 
 clean: FORCE
-	-rm -f $(EXE) $(EXE).debug $(CC_DEPEND) $(C_DEPEND) $(CC_OBJECTS) $(C_OBJECTS)
+	-rm -f $(EXE) $(EXE).debug $(CC_DEPEND) $(C_DEPEND) $(CUDA_DEPEND) $(CC_OBJECTS) $(C_OBJECTS) $(CUDA_OBJECTS)
 	-rm -rf $(BUILD_OBJS_DIR)
 
 # dummy FORCE rule
