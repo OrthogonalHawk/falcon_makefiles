@@ -127,6 +127,7 @@ include $(MAKEFILE_TARGET_DIR)/Makefile.target
 
 CC        = $(CROSS)g++
 C         = $(CROSS)gcc
+AR        = $(CROSS)ar
 OBJCOPY   = $(CROSS)objcopy
 STRIP     = $(CROSS)strip
 
@@ -168,6 +169,8 @@ ifdef BUILD_OBJS_DIR
     BUILD_SUBDIRS  := $(sort $(dir $(CC_OBJECTS) $(C_OBJECTS) $(CUDA_OBJECTS)))
     DUMMY          := $(shell mkdir -p $(BUILD_SUBDIRS))
 endif
+
+OTHER          := $(shell echo 'helllllllllllllooooooo2222222222222222')
 
 ###############################################################################
 # Update FLAGS
@@ -288,6 +291,8 @@ define split_args
 	$(if $(_args),$1$(_args))
 endef
 define EOL
+
+
 endef
 
 ARCHIVE=$(AR) $(AR_FLAGS) $@
@@ -296,7 +301,7 @@ Q_ARCHIVE = @echo " [AR] $@"; $(ARCHIVE)
 
 # *.o => .a
 $(LIB): $(CC_OBJECTS) $(C_OBJECTS) $(CUDA_OBJECTS) $(ADDITIONAL_OBJECTS)
-	mkdir -p $(dir ${LIB})
+	@mkdir -p $(dir ${LIB})
 	$(call split_args,$($(Q)ARCHIVE),500,$^)
 
 ###############################################################################
